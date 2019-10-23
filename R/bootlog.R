@@ -36,11 +36,15 @@ bootlog <- function(lolog,
   #                     error = function(e){print("Unable to fit the LOLOG to the simulated network")
   #                       return(NULL)}))){return(NULL)}
 
-  #remove original net to stop confusion
-  rm(net)
+  #get the model parameters
+  thetas = lolog$theta
 
-  fit <- function(net,formula){
-    sim_net <- lolog::as.network(simulate(lolog,nsim = fits,seed = seed))
+  fit <- function(formula){
+    environment(formula) <- environment()
+    sim_net <- net
+    lolog = lolog::createLatentOrderLikelihood(formula)
+    lolog$setThetas(thetas)
+    sim_net <- lolog::as.network(lolog$generateNetwork()$network)
 
     tmp <- tryCatch({lolog(formula,verbose = 0)},
                     error = function(e){return(NA)},
@@ -60,8 +64,9 @@ bootlog <- function(lolog,
   #if the fits are more that 1000 split up into batches of 1000
   cl <- parallel::makeCluster(cores)
   registerDoParallel(cl)
+  parallel::clusterExport(cl,varlist = c("net","thetas"),envir = environment())
 
-  fits <- foreach(i = (1:length(sims)), .inorder = FALSE, .packages = "lolog",.errorhandling = "pass") %dopar% {fit(sims[[i]],formula)}
+  fits <- foreach(i = (1:fits), .inorder = FALSE, .packages = "lolog",.errorhandling = "pass") %dopar% {fit(formula)}
 
   parallel::stopCluster(cl)
   print(paste("The parallelisation ended at ", Sys.time(),sep = ""))
